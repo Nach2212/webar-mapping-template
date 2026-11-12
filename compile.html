@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Compilador de marcadores</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 640px; margin: 32px auto; padding: 0 16px; line-height: 1.5; }
+    button { padding: 10px 20px; font-size: 16px; border-radius: 8px; border: 0; background: #00a8d8; color: #fff; }
+    button:disabled { opacity: .5; }
+    #thumbs img { height: 90px; margin: 4px; border: 1px solid #ccc; }
+    #log { white-space: pre-wrap; font-family: monospace; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <h1>Compilador de marcadores 🎯</h1>
+  <p>Sube las imágenes de tus marcadores <b>en el orden que quieres</b> (la primera es el marcador 0, la segunda el 1…). Se genera un archivo <code>targets.mind</code>: guárdalo en la carpeta <code>targets/</code>.</p>
+  <input id="files" type="file" accept="image/*" multiple />
+  <div id="thumbs"></div>
+  <p><button id="go" disabled>Compilar</button></p>
+  <progress id="bar" value="0" max="100" style="width:100%" hidden></progress>
+  <div id="log"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image.prod.js"></script>
+  <script>
+    const files = document.getElementById('files');
+    const go = document.getElementById('go');
+    const log = document.getElementById('log');
+    const bar = document.getElementById('bar');
+    const thumbs = document.getElementById('thumbs');
+    let imgs = [];
+
+    const loadImg = (f) => new Promise((res, rej) => {
+      const i = new Image();
+      i.onload = () => res(i);
+      i.onerror = rej;
+      i.src = URL.createObjectURL(f);
+    });
+
+    files.addEventListener('change', async () => {
+      thumbs.innerHTML = '';
+      imgs = await Promise.all([...files.files].map(loadImg));
+      imgs.forEach((i, n) => { i.title = `#${n}`; thumbs.appendChild(i.cloneNode()); });
+      log.textContent = imgs.map((i, n) => `#${n}: ${i.width}×${i.height}  → aspect = ${(i.height / i.width).toFixed(4)}`).join('\n');
+      go.disabled = !imgs.length;
+    });
+
+    go.addEventListener('click', async () => {
+      go.disabled = true; bar.hidden = false;
+      const compiler = new window.MINDAR.IMAGE.Compiler();
+      await compiler.compileImageTargets(imgs, (p) => { bar.value = p; });
+      const buf = await compiler.exportData();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([buf]));
+      a.download = 'targets.mind';
+      a.click();
+      log.textContent += '\n\n✅ Listo. Copia "aspect" de cada imagen a config.js';
+      go.disabled = false;
+    });
+  </script>
+</body>
+</html>

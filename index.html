@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>WebAR Mapping Template</title>
+  <style>
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #000; font-family: system-ui, sans-serif; }
+    #ar { position: fixed; inset: 0; }
+    #start, #msg {
+      position: fixed; inset: 0; z-index: 20; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 16px; color: #fff;
+      background: #0b1020; text-align: center; padding: 24px;
+    }
+    #start button, .btn {
+      border: 0; border-radius: 999px; padding: 14px 28px; font-size: 18px; font-weight: 600;
+      background: #00c8ff; color: #04121c;
+    }
+    #hint {
+      position: fixed; top: 16px; left: 50%; transform: translateX(-50%); z-index: 10;
+      background: rgba(0,0,0,.55); color: #fff; padding: 8px 16px; border-radius: 999px;
+      font-size: 14px; transition: opacity .3s; pointer-events: none;
+    }
+    #controls {
+      position: fixed; bottom: 24px; left: 0; right: 0; z-index: 10;
+      display: flex; justify-content: center; gap: 24px; align-items: center;
+    }
+    .round {
+      width: 64px; height: 64px; border-radius: 50%; border: 4px solid #fff;
+      background: rgba(255,255,255,.2); color: #fff; font-size: 24px;
+    }
+    #rec.on { background: #ff3b3b; }
+    #timer { color: #fff; font-size: 14px; min-width: 40px; text-align: center; }
+    .hidden { display: none !important; }
+  </style>
+
+  <!-- three + MindAR. three/addons es obligatorio: MindAR importa CSS3DRenderer de ahí -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
+      "mindar-image-three": "https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div id="ar"></div>
+
+  <div id="start">
+    <h1 style="margin:0">WebAR Mapping</h1>
+    <p style="max-width:320px;opacity:.8">Apunta la cámara al marcador para ver la magia ✨</p>
+    <button id="startBtn">Activar cámara</button>
+  </div>
+
+  <div id="msg" class="hidden"></div>
+  <div id="hint" class="hidden">Busca el marcador…</div>
+
+  <div id="controls" class="hidden">
+    <button id="photo" class="round" aria-label="Foto">📷</button>
+    <span id="timer"></span>
+    <button id="rec" class="round" aria-label="Grabar video">⏺</button>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
