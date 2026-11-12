@@ -6,6 +6,10 @@ Plantilla **WebAR** lista para usar: apunta la cámara del celular a una imagen 
 
 *English: a zero-build WebAR template (MindAR + three.js) with image tracking, image/video overlays and photo/video capture with AR baked in. Edit `config.js`, compile your markers, deploy to GitHub Pages.*
 
+<p align="center"><img src="demo.gif" alt="Demo: la cámara detecta el marcador y aparece el contenido AR encima" width="260"></p>
+
+<p align="center"><b><a href="https://nach2212.github.io/webar-mapping-template/">▶ Probar la demo en vivo</a></b> (ábrela en tu celular y apunta a <code>targets/marker-demo.png</code>)</p>
+
 ## Probarlo en 2 minutos
 
 1. Publica el repo en GitHub Pages (ver abajo).
