@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { MindARThree } from 'mindar-image-three';
 import { CONFIG } from './config.js';
+import { buildContent } from './content.js';
 
 const $ = (id) => document.getElementById(id);
 const container = $('ar');
@@ -11,48 +12,6 @@ function showMessage(html) {
   const m = $('msg');
   m.innerHTML = html;
   m.classList.remove('hidden');
-}
-
-// ---------- Contenido de cada marcador ----------
-function buildContent(item, loader, videos) {
-  const group = new THREE.Group();
-  const w = item.width ?? 1;
-
-  if (item.type === 'video') {
-    const v = document.createElement('video');
-    v.src = item.src;
-    v.loop = item.loop ?? true;
-    v.muted = true;            // necesario para autoplay en móviles
-    v.playsInline = true;
-    v.crossOrigin = 'anonymous';
-    v.preload = 'auto';
-    videos.push(v);
-    const tex = new THREE.VideoTexture(v);
-    tex.colorSpace = THREE.SRGBColorSpace;
-    const vw = () => (v.videoHeight ? v.videoHeight / v.videoWidth : 9 / 16);
-    const mesh = new THREE.Mesh(
-      new THREE.PlaneGeometry(1, 1),
-      new THREE.MeshBasicMaterial({ map: tex, transparent: true })
-    );
-    v.addEventListener('loadedmetadata', () => mesh.scale.set(w, w * vw(), 1));
-    mesh.scale.set(w, w * vw(), 1);
-    mesh.position.set(...(item.position ?? [0, 0, 0.01]));
-    group.add(mesh);
-    group.userData.video = v;
-  } else {
-    const tex = loader.load(item.src);
-    tex.colorSpace = THREE.SRGBColorSpace;
-    const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true });
-    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mat);
-    const img = new Image();
-    img.onload = () => mesh.scale.set(w, w * (img.height / img.width), 1);
-    img.src = item.src;
-    mesh.scale.set(w, w, 1);
-    mesh.position.set(...(item.position ?? [0, 0, 0.01]));
-    if (item.spin) mesh.userData.spin = true;
-    group.add(mesh);
-  }
-  return group;
 }
 
 // ---------- Arranque ----------
@@ -71,28 +30,41 @@ $('startBtn').addEventListener('click', async () => {
   });
   const { renderer, scene, camera } = mindar;
   const loader = new THREE.TextureLoader();
-  const videos = [];
-  const spinners = [];
+  const media = { videos: [], audios: [], spinners: [], mixers: [], needsLight: false };
 
   CONFIG.targets.forEach((t, i) => {
     const anchor = mindar.addAnchor(i);
-    const myVideos = [];
-    t.content.forEach((c) => {
-      const g = buildContent(c, loader, myVideos);
-      g.traverse((o) => o.userData.spin && spinners.push(o));
-      anchor.group.add(g);
-    });
+    const mine = { videos: [], audios: [], spinners: media.spinners, mixers: media.mixers, needsLight: false };
+    t.content.forEach((c) => anchor.group.add(buildContent(c, loader, mine)));
+    media.needsLight ||= mine.needsLight;
+    const myVideos = mine.videos;
+    const myAudios = mine.audios;
+    media.audios.push(...myAudios);
     anchor.onTargetFound = () => {
       if (params.has('debug')) console.log('[webar] marcador encontrado:', t.name);
       $('hint').classList.add('hidden');
       myVideos.forEach((v) => v.play().catch(() => {}));
+      myAudios.forEach((a) => a.play().catch(() => {}));
     };
     anchor.onTargetLost = () => {
       if (params.has('debug')) console.log('[webar] marcador perdido:', t.name);
       $('hint').classList.remove('hidden');
       myVideos.forEach((v) => v.pause());
+      myAudios.forEach((a) => a.pause());
     };
   });
+
+  // Luz para los modelos 3D (los planos de imagen/video no la necesitan)
+  if (media.needsLight) {
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x445566, 2.2));
+    const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+    sun.position.set(0.5, 1, 1);
+    scene.add(sun);
+  }
+
+  // iOS/Android solo dejan reproducir audio tras un gesto del usuario:
+  // "desbloqueamos" cada audio con el toque en "Activar cámara".
+  media.audios.forEach((a) => { a.muted = true; a.play().then(() => { a.pause(); a.currentTime = 0; a.muted = false; }).catch(() => { a.muted = false; }); });
 
   try {
     await mindar.start();
@@ -190,7 +162,8 @@ $('startBtn').addEventListener('click', async () => {
   const clock = new THREE.Clock();
   renderer.setAnimationLoop(() => {
     const dt = clock.getDelta();
-    spinners.forEach((s) => (s.rotation.z += dt * 0.8));
+    media.spinners.forEach((s) => (s.rotation.z += dt * 0.8));
+    media.mixers.forEach((m) => m.update(dt));
     renderer.render(scene, camera);
 
     // Componer JUSTO después de render (así no hace falta preserveDrawingBuffer)

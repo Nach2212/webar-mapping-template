@@ -4,7 +4,7 @@ Plantilla **WebAR** lista para usar: apunta la cámara del celular a una imagen 
 
 > Pensada para **mapping AR**: marcadores proyectados o impresos que activan una escena en el celular de cada persona.
 
-*English: a zero-build WebAR template (MindAR + three.js) with image tracking, image/video overlays and photo/video capture with AR baked in. Edit `config.js`, compile your markers, deploy to GitHub Pages.*
+*English: [README.en.md](README.en.md) — a zero-build WebAR template (MindAR + three.js) with image tracking, image/video overlays and photo/video capture with AR baked in. Edit `config.js`, compile your markers, deploy to GitHub Pages.*
 
 <p align="center"><img src="demo.gif" alt="Demo: la cámara detecta el marcador y aparece el contenido AR encima" width="260"></p>
 
@@ -37,6 +37,17 @@ targets: [
 ]
 ```
 
+## Tipos de contenido
+
+| `type` | Qué muestra | Opciones principales |
+|---|---|---|
+| `image` | Imagen (PNG con transparencia sirve) | `src`, `width`, `position`, `spin` |
+| `video` | Video sobre el marcador | `src`, `width`, `position`, `loop` |
+| `model` | Modelo 3D `.glb`/`.gltf` con sus animaciones | `src`, `scale`, `position`, `rotation`, `spin` |
+| `audio` | Sonido al detectar el marcador (pausa al perderlo) | `src`, `loop`, `volume` |
+
+Hay un cubo de prueba en `assets/demo-cube.glb`. Nota: el audio suena en el celular pero **no** queda grabado en los videos capturados (por ahora, ver issues).
+
 ## Publicar gratis (GitHub Pages)
 
 1. Sube todo a un repo.
@@ -65,6 +76,13 @@ Para probar local: `python3 -m http.server` y abre desde el celular con un túne
 - [MindAR](https://github.com/hiukim/mind-ar-js) (MIT) para el image tracking.
 - [three.js](https://threejs.org/) para dibujar el contenido sobre el marcador.
 - La captura compone cámara + escena 3D + marca de agua en un `<canvas>` y lo graba con `MediaRecorder`.
+
+## Estructura
+
+- `config.js` — lo único que editas.
+- `content.js` — construye imagen / video / modelo / audio para cada marcador.
+- `app.js` — cámara, tracking, captura de foto y video.
+- `compile.html` — compilador de marcadores en el navegador.
 
 ## Créditos y licencia
 

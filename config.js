@@ -20,12 +20,23 @@ export const CONFIG = {
       aspect: 372 / 674,
       content: [
         {
-          type: 'image',            // 'image' | 'video'
+          type: 'image',            // 'image' | 'video' | 'model' | 'audio'
           src: 'assets/demo-overlay.png',
           width: 0.6,               // 1 = ancho completo del marcador
           position: [0, 0, 0.05],   // [x, y, z]  (z positivo = hacia ti)
           spin: true                // gira suavemente (opcional)
         }
+        // Ejemplo con modelo 3D (.glb) — descomenta para probar el cubo de demo:
+        // {
+        //   type: 'model',
+        //   src: 'assets/demo-cube.glb',
+        //   scale: 0.3,              // tamaño relativo al ancho del marcador
+        //   position: [0, 0, 0.15],
+        //   rotation: [0, 0, 0],     // radianes (opcional)
+        //   spin: true               // gira sobre el marcador (opcional)
+        // },
+        // Ejemplo con audio (suena al detectar el marcador, se pausa al perderlo):
+        // { type: 'audio', src: 'assets/ambiente.mp3', loop: true, volume: 0.8 },
         // Ejemplo con video (descomenta y cambia el archivo):
         // {
         //   type: 'video',
