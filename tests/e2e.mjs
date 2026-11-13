@@ -272,7 +272,7 @@ const tests = [
     assert(high.dpr === 3, 'La prueba necesita devicePixelRatio 3');
     assert(high.quality === 'high' && Math.abs(high.ratio - 2) < 0.05, 'high debería limitar el pixel ratio a 2');
     assert(low.quality === 'low' && Math.abs(low.ratio - 1) < 0.05, 'low debería usar pixel ratio 1');
-    assert(low.photoLong <= 854 && high.photoLong <= 1280, 'Tamaño de captura fuera del límite');
+    assert(Math.abs(high.photoLong - 1280) <= 2 && Math.abs(low.photoLong - 854) <= 2, 'Con pantalla 3x la captura debería llegar al tope del perfil (1280 / 854)');
   }],
 
   ['error: permiso de cámara denegado', async () => {

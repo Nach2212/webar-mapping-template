@@ -68,7 +68,12 @@ export function createCapture(opts) {
   /** Dibuja un cuadro en `out`. Devuelve false si no se pudo (p. ej. cambió el tamaño al grabar). */
   function compose() {
     const cr = container.getBoundingClientRect();
-    const { W, H, scale } = captureSize(cr.width, cr.height, quality.captureMax);
+    // Se captura en píxeles reales de la pantalla (no en píxeles CSS, que en un
+    // celular son 2 o 3 veces menos) hasta el tope del perfil de calidad.
+    const dpr = window.devicePixelRatio || 1;
+    const { W, H } = captureSize(cr.width * dpr, cr.height * dpr, quality.captureMax);
+    const sx = W / cr.width;
+    const sy = H / cr.height;
     if (out.width !== W || out.height !== H) {
       // Girar el teléfono cambia el tamaño: un video no puede cambiar de tamaño
       // a mitad de camino, así que se cierra con lo grabado hasta ahí.
@@ -83,7 +88,7 @@ export function createCapture(opts) {
       const r = el.getBoundingClientRect();
       if (!r.width || !r.height) return;
       try {
-        ctx.drawImage(el, (r.left - cr.left) * scale, (r.top - cr.top) * scale, r.width * scale, r.height * scale);
+        ctx.drawImage(el, (r.left - cr.left) * sx, (r.top - cr.top) * sy, r.width * sx, r.height * sy);
       } catch (_) { /* video aún sin datos */ }
     };
     const cam = container.querySelector('video');
@@ -94,9 +99,9 @@ export function createCapture(opts) {
       ctx.font = `${Math.max(12, Math.round(W * 0.035))}px system-ui, sans-serif`;
       ctx.fillStyle = 'rgba(255,255,255,.85)';
       ctx.shadowColor = 'rgba(0,0,0,.6)';
-      ctx.shadowBlur = 6;
+      ctx.shadowBlur = Math.round(W * 0.012);
       ctx.textAlign = 'right';
-      ctx.fillText(watermark, W - 16, H - 16);
+      ctx.fillText(watermark, W - Math.round(W * 0.03), H - Math.round(W * 0.03));
       ctx.shadowBlur = 0;
     }
     return true;
