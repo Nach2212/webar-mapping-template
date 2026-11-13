@@ -23,7 +23,16 @@ export function findChrome() {
   return found;
 }
 
-export async function launch({ args = [], width = 412, height = 820 } = {}) {
+/** Lanza Chrome; si no alcanza a arrancar (pasa a veces en CI), reintenta con un perfil nuevo. */
+export async function launch(options = {}) {
+  let lastError;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try { return await launchOnce(options); } catch (e) { lastError = e; console.warn(`      (Chrome no arrancó, intento ${attempt}/3: ${e.message})`); }
+  }
+  throw lastError;
+}
+
+async function launchOnce({ args = [], width = 412, height = 820 } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'webar-e2e-'));
   const proc = spawn(findChrome(), [
     '--headless=new',
@@ -32,6 +41,7 @@ export async function launch({ args = [], width = 412, height = 820 } = {}) {
     '--no-first-run',
     '--no-default-browser-check',
     '--no-sandbox',
+    '--disable-dev-shm-usage',     // en Linux/CI /dev/shm es chico y Chrome puede caerse
     '--enable-unsafe-swiftshader', // WebGL por software donde no hay GPU (CI)
     '--ignore-gpu-blocklist',
     '--mute-audio',
@@ -41,8 +51,14 @@ export async function launch({ args = [], width = 412, height = 820 } = {}) {
   ], { stdio: 'ignore' });
 
   const portFile = join(dir, 'DevToolsActivePort');
-  for (let i = 0; i < 150 && !existsSync(portFile); i++) await sleep(100);
-  if (!existsSync(portFile)) { proc.kill(); throw new Error('Chrome no abrió el puerto de depuración'); }
+  let exited = false;
+  proc.on('exit', () => { exited = true; });
+  for (let i = 0; i < 400 && !existsSync(portFile) && !exited; i++) await sleep(100);
+  if (!existsSync(portFile)) {
+    try { proc.kill(); } catch (_) { /* nada */ }
+    try { rmSync(dir, { recursive: true, force: true }); } catch (_) { /* nada */ }
+    throw new Error(exited ? 'Chrome se cerró al arrancar' : 'Chrome no abrió el puerto de depuración');
+  }
   const port = readFileSync(portFile, 'utf8').split('\n')[0].trim();
 
   let target;
