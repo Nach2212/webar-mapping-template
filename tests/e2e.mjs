@@ -21,7 +21,7 @@ const server = await serve(root, 0, generated);
 const assert = (cond, msg) => { if (!cond) throw new Error(msg); };
 
 /** Crea un video .y4m de un cuadro con el marcador al centro: será "lo que ve la cámara". */
-async function makeFakeCamera(markerPath, name) {
+async function makeFakeCamera(markerPath, name, { size = 1, tilt = 0 } = {}) {
   const chrome = await launch();
   try {
     await chrome.goto(`${server.url}/tests/fixtures/blank.html`);
@@ -33,9 +33,12 @@ async function makeFakeCamera(markerPath, name) {
       const c = document.createElement('canvas'); c.width = W; c.height = H;
       const g = c.getContext('2d');
       g.fillStyle = '#6f6a63'; g.fillRect(0, 0, W, H);
-      const s = Math.min(460 / img.naturalWidth, 340 / img.naturalHeight);
+      const s = Math.min(460 / img.naturalWidth, 340 / img.naturalHeight) * ${size};
       const w = img.naturalWidth * s, h = img.naturalHeight * s;
-      g.drawImage(img, (W - w) / 2, (H - h) / 2, w, h);
+      g.translate(W / 2, H / 2); g.rotate(${tilt} * Math.PI / 180);
+      g.transform(1, 0, ${tilt ? -0.25 : 0}, 1, 0, 0); // inclinación: simula mirar el marcador de lado
+      g.drawImage(img, -w / 2, -h / 2, w, h);
+      g.resetTransform();
       const px = g.getImageData(0, 0, W, H).data;
       const out = new Uint8Array(W * H * 3 / 2);
       let u = W * H, v = u + (W * H) / 4;
@@ -229,6 +232,26 @@ const tests = [
       console.log(`      video visible en ${(magenta * 100).toFixed(0)}% de la foto · audio RMS ${v.rms.toFixed(3)}`);
       assert(v.hasAudio && v.rms > 0.02, 'El sonido del video no quedó en la grabación: ' + JSON.stringify(v));
     } finally { await chrome.close(); }
+  }],
+
+  ['ejemplos: los 3 marcadores de examples/ se detectan (de frente, y lejos e inclinados)', async () => {
+    const names = ['engranajes', 'constelacion', 'mosaico'];
+    const files = ['01-engranajes', '02-constelacion', '03-mosaico'];
+    for (const [label, pose] of [['de frente', {}], ['lejos e inclinado', { size: 0.6, tilt: 20 }]]) {
+      for (let i = 0; i < 3; i++) {
+        const cam = await makeFakeCamera(`examples/markers/${files[i]}.png`, `ej-${i}-${pose.tilt ?? 0}`, pose);
+        const chrome = await launch({ args: withCamera(cam) });
+        try {
+          await openAndTrack(chrome, '&config=examples/config.js');
+          const seen = await chrome.evaluate(`window.__webar.visible[0]`);
+          assert(seen === names[i], `Mostrando ${files[i]} (${label}) se detectó «${seen}»`);
+          await sleep(1200);
+          assert(await chrome.evaluate(`window.__webar.visible[0]`) === names[i], `${files[i]} (${label}): el seguimiento se perdió`);
+          const errors = chrome.logs.filter((l) => l.startsWith('[exception]') || l.startsWith('[error]'));
+          assert(errors.length === 0, 'Errores en la consola: ' + errors.join(' | '));
+        } finally { await chrome.close(); }
+      }
+    }
   }],
 
   ['rendimiento: perfiles de calidad limitan pixel ratio, cámara y captura', async () => {
