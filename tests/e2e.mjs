@@ -364,13 +364,22 @@ for (const [name, fn] of tests) {
   if (filter && !name.includes(filter)) continue;
   ran++;
   const t0 = Date.now();
+  // Límite por prueba: en CI (WebGL por software) todo es más lento, pero nada debería colgarse.
+  const once = () => Promise.race([fn(), new Promise((_, no) => setTimeout(() => no(new Error('La prueba superó los 5 minutos')), 300000).unref())]);
   try {
-    // Límite por prueba: en CI (WebGL por software) todo es más lento, pero nada debería colgarse.
-    await Promise.race([fn(), new Promise((_, no) => setTimeout(() => no(new Error('La prueba superó los 5 minutos')), 300000).unref())]);
+    try {
+      await once();
+    } catch (first) {
+      // Las pruebas dependen de la red (three.js y MindAR vienen de un CDN): un
+      // tropiezo aislado no debe botar todo. Se reintenta una vez y queda anotado.
+      console.log(`  ↻ ${name}: falló (${String(first.message).split(/\r?\n/)[0]}), reintento…`);
+      await once();
+    }
     console.log(`✓ ${name} (${((Date.now() - t0) / 1000).toFixed(1)} s)`);
   } catch (e) {
     failed++;
-    console.log(`✗ ${name}\n    ${String(e.message).split('\n').join('\n    ')}`);
+    console.log(`✗ ${name}`);
+    String(e.message).split(/\r?\n/).forEach((line) => console.log('    ' + line));
   }
 }
 server.close();
