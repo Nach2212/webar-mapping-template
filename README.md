@@ -54,6 +54,8 @@ targets: [
 - **`sound: true`** hace que un video suene (por defecto va en silencio para que pueda empezar solo).
 - El sonido de los `audio` y de los videos con `sound: true` **queda grabado en los videos** que captura la persona.
 
+Un marcador puede tener varios items a la vez. Si defines varios marcadores, la cámara sigue **uno a la vez** (el que esté a la vista).
+
 Hay un cubo de prueba en `assets/demo-cube.glb`.
 
 ## Opciones de config.js

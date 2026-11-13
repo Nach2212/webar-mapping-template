@@ -252,6 +252,7 @@ async function boot() {
       // liviano (nunca a mitad de una grabación: cambiaría el tamaño del video).
       if (qSetting === 'auto' && quality.name === 'high' && !document.hidden && !capture.recording) {
         fpsSamples.push(state.fps);
+        if (fpsSamples.length > 5) fpsSamples.shift();
         if (shouldDowngrade(fpsSamples)) {
           Object.assign(quality, QUALITY.low);
           renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, quality.pixelRatio));

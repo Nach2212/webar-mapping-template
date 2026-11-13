@@ -54,6 +54,8 @@ targets: [
 - **`sound: true`** makes a video audible (videos are silent by default so they can start on their own).
 - Sound from `audio` items and from videos with `sound: true` **is recorded into the videos** visitors capture.
 
+A marker can have several items at once. If you define several markers, the camera tracks **one at a time** (whichever is in view).
+
 There is a test cube at `assets/demo-cube.glb`.
 
 ## config.js options
