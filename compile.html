@@ -3,59 +3,118 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Compilador de marcadores</title>
+  <title>Compilador de marcadores · Marker compiler</title>
   <style>
-    body { font-family: system-ui, sans-serif; max-width: 640px; margin: 32px auto; padding: 0 16px; line-height: 1.5; }
-    button { padding: 10px 20px; font-size: 16px; border-radius: 8px; border: 0; background: #00a8d8; color: #fff; }
-    button:disabled { opacity: .5; }
-    #thumbs img { height: 90px; margin: 4px; border: 1px solid #ccc; }
-    #log { white-space: pre-wrap; font-family: monospace; font-size: 13px; }
+    body { font-family: system-ui, sans-serif; max-width: 680px; margin: 32px auto; padding: 0 16px; line-height: 1.5; color: #14202b; }
+    .en { color: #5b6b78; font-size: 14px; }
+    button { padding: 10px 20px; font-size: 16px; border-radius: 8px; border: 0; background: #0086ad; color: #fff; cursor: pointer; }
+    button:disabled { opacity: .5; cursor: default; }
+    #thumbs { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+    #thumbs figure { margin: 0; text-align: center; font-size: 12px; }
+    #thumbs img { height: 90px; display: block; border: 1px solid #ccc; }
+    #status { min-height: 1.5em; }
+    #status.error { color: #b3261e; font-weight: 600; }
+    .warn { color: #8a5a00; }
+    pre { background: #f2f5f7; padding: 12px; border-radius: 8px; overflow-x: auto; font-size: 13px; }
   </style>
 </head>
 <body>
   <h1>Compilador de marcadores 🎯</h1>
-  <p>Sube las imágenes de tus marcadores <b>en el orden que quieres</b> (la primera es el marcador 0, la segunda el 1…). Se genera un archivo <code>targets.mind</code>: guárdalo en la carpeta <code>targets/</code>.</p>
-  <input id="files" type="file" accept="image/*" multiple />
+  <p>Elige las imágenes de tus marcadores <b>todas juntas</b>. El orden de la lista de abajo es el que vale: la primera es el marcador 0, la segunda el 1… Se genera un archivo <code>targets.mind</code>: guárdalo en la carpeta <code>targets/</code>.</p>
+  <p class="en">Pick all your marker images at once. The order shown below is the order you must use in <code>config.js</code>. Save the downloaded <code>targets.mind</code> into <code>targets/</code>.</p>
+
+  <input id="files" type="file" accept="image/png,image/jpeg,image/webp" multiple />
   <div id="thumbs"></div>
-  <p><button id="go" disabled>Compilar</button></p>
+  <div id="notes"></div>
+  <p><button id="go" disabled>Compilar · Compile</button></p>
   <progress id="bar" value="0" max="100" style="width:100%" hidden></progress>
-  <div id="log"></div>
+  <p id="status" role="status" aria-live="polite">Cargando el compilador… · Loading the compiler…</p>
+  <div id="result" hidden>
+    <p>✅ Listo. Pega esto en <code>config.js</code> y completa el contenido de cada marcador · Paste this into <code>config.js</code>:</p>
+    <pre id="snippet"></pre>
+  </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image.prod.js"></script>
-  <script>
-    const files = document.getElementById('files');
-    const go = document.getElementById('go');
-    const log = document.getElementById('log');
-    const bar = document.getElementById('bar');
-    const thumbs = document.getElementById('thumbs');
-    let imgs = [];
+  <script type="module">
+    const $ = (id) => document.getElementById(id);
+    const files = $('files'), go = $('go'), bar = $('bar'), thumbs = $('thumbs'), notes = $('notes'), status = $('status');
+    const say = (text, isError = false) => { status.textContent = text; status.classList.toggle('error', isError); };
 
-    const loadImg = (f) => new Promise((res, rej) => {
-      const i = new Image();
-      i.onload = () => res(i);
-      i.onerror = rej;
-      i.src = URL.createObjectURL(f);
+    // El compilador de MindAR es un módulo ES: hay que importarlo (no sirve <script src>).
+    let Compiler = null;
+    try {
+      ({ Compiler } = await import('https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image.prod.js'));
+      say('Elige tus imágenes · Choose your images');
+    } catch (e) {
+      console.error(e);
+      say('No pude cargar el compilador. Revisa tu conexión a internet y recarga · Could not load the compiler. Check your connection and reload.', true);
+    }
+
+    let items = []; // { name, img }
+
+    const loadImg = (file) => new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => { URL.revokeObjectURL(url); resolve({ name: file.name, img }); };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error(file.name)); };
+      img.src = url;
     });
 
+    const baseName = (n) => n.replace(/\.[^.]+$/, '').replace(/[^A-Za-z0-9_-]+/g, '-') || 'marcador';
+
     files.addEventListener('change', async () => {
-      thumbs.innerHTML = '';
-      imgs = await Promise.all([...files.files].map(loadImg));
-      imgs.forEach((i, n) => { i.title = `#${n}`; thumbs.appendChild(i.cloneNode()); });
-      log.textContent = imgs.map((i, n) => `#${n}: ${i.width}×${i.height}  → aspect = ${(i.height / i.width).toFixed(4)}`).join('\n');
-      go.disabled = !imgs.length;
+      thumbs.textContent = ''; notes.textContent = ''; $('result').hidden = true; items = [];
+      go.disabled = true;
+      try {
+        items = await Promise.all([...files.files].map(loadImg));
+      } catch (e) {
+        return say(`No pude leer «${e.message}». Usa PNG o JPG · Could not read that file. Use PNG or JPG.`, true);
+      }
+      items.forEach(({ name, img }, n) => {
+        const fig = document.createElement('figure');
+        const cap = document.createElement('figcaption');
+        cap.textContent = `#${n} · ${img.naturalWidth}×${img.naturalHeight}`;
+        // Miniatura = copia. La imagen original NO va al DOM: el compilador lee
+        // img.width/height y el CSS de la miniatura se los cambiaría.
+        const thumb = img.cloneNode();
+        thumb.alt = name;
+        fig.append(thumb, cap);
+        thumbs.appendChild(fig);
+        if (Math.min(img.naturalWidth, img.naturalHeight) < 320) {
+          const p = document.createElement('p');
+          p.className = 'warn';
+          p.textContent = `⚠️ #${n} «${name}» es muy pequeña (${img.naturalWidth}×${img.naturalHeight}). Funciona mejor con 600 px o más por lado · Very small image; 600 px or more per side tracks better.`;
+          notes.appendChild(p);
+        }
+      });
+      go.disabled = !items.length || !Compiler;
+      if (items.length && Compiler) say(`${items.length} imagen(es) lista(s) · ready`);
     });
 
     go.addEventListener('click', async () => {
-      go.disabled = true; bar.hidden = false;
-      const compiler = new window.MINDAR.IMAGE.Compiler();
-      await compiler.compileImageTargets(imgs, (p) => { bar.value = p; });
-      const buf = await compiler.exportData();
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(new Blob([buf]));
-      a.download = 'targets.mind';
-      a.click();
-      log.textContent += '\n\n✅ Listo. Copia "aspect" de cada imagen a config.js';
-      go.disabled = false;
+      go.disabled = true; files.disabled = true; bar.hidden = false; bar.value = 0;
+      say('Compilando… puede tardar un minuto, no cierres la pestaña · Compiling… this can take a minute.');
+      try {
+        const compiler = new Compiler();
+        await compiler.compileImageTargets(items.map((i) => i.img), (p) => { bar.value = p; });
+        const blob = new Blob([compiler.exportData()], { type: 'application/octet-stream' });
+        window.lastCompiled = { blob, count: items.length }; // para depurar desde la consola
+
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'targets.mind';
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+
+        $('snippet').textContent = 'targets: [\n' + items.map(({ name }, n) =>
+          `  { name: '${baseName(name)}', content: [ /* marcador #${n} */ ] }`).join(',\n') + '\n]';
+        $('result').hidden = false;
+        say(`✅ targets.mind descargado con ${items.length} marcador(es) · downloaded`);
+      } catch (e) {
+        console.error(e);
+        say('La compilación falló. Prueba con imágenes más pequeñas (máx. ~1500 px) o en otro navegador · Compilation failed. Try smaller images or another browser.', true);
+      } finally {
+        go.disabled = false; files.disabled = false; bar.hidden = true;
+      }
     });
   </script>
 </body>
