@@ -46,7 +46,7 @@ export async function launch({ args = [], width = 412, height = 820 } = {}) {
   const port = readFileSync(portFile, 'utf8').split('\n')[0].trim();
 
   let target;
-  for (let i = 0; i < 50 && !target; i++) {
+  for (let i = 0; i < 300 && !target; i++) { // hasta 30 s: en CI Chrome puede tardar en mostrar su página
     try {
       const list = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
       target = list.find((t) => t.type === 'page');
