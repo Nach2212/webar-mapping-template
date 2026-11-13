@@ -22,6 +22,11 @@ export function buildContent(item, ctx) {
     v.loop = item.loop ?? true;
     v.muted = true;              // necesario para autoplay en móviles
     v.playsInline = true;
+    // iOS mira los ATRIBUTOS (no solo las propiedades) para decidir si deja
+    // reproducir sin pantalla completa y sin gesto del usuario.
+    v.setAttribute('muted', '');
+    v.setAttribute('playsinline', '');
+    v.setAttribute('webkit-playsinline', '');
     v.preload = 'auto';
     v.addEventListener('error', () => fail(v.error));
     v.src = item.src;

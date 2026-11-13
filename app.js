@@ -195,6 +195,7 @@ async function boot() {
       el.controls = true;
       el.loop = true;
       el.playsInline = true;
+      el.setAttribute('playsinline', ''); // iOS: sin esto abre el video a pantalla completa
       el.setAttribute('aria-label', t('previewVideo'));
     }
     el.src = previewUrl;
@@ -261,9 +262,18 @@ async function boot() {
 
     // Los navegadores móviles solo dejan sonar audio tras un gesto del usuario:
     // "desbloqueamos" cada elemento ahora, dentro del toque (antes de cualquier await).
-    media.audios.forEach((a) => {
-      a.muted = true;
-      a.play().then(() => { a.pause(); a.currentTime = 0; }).catch(() => {}).finally(() => { a.muted = false; });
+    // Los videos también: en iOS con "modo de bajo consumo" ni siquiera un video
+    // sin sonido puede empezar solo si antes no se reprodujo con un toque.
+    [...media.audios, ...media.videos].forEach((el) => {
+      const wasMuted = el.muted;
+      el.muted = true;
+      el.play()
+        .then(() => {
+          // Si el marcador apareció mientras tanto, ya está sonando de verdad: no lo cortes.
+          if (!anchors.some((a) => a.visible && a.els.includes(el))) { el.pause(); el.currentTime = 0; }
+        })
+        .catch(() => {})
+        .finally(() => { el.muted = wasMuted; });
     });
 
     const env = { isSecureContext: window.isSecureContext, hasMediaDevices: !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia) };
@@ -331,6 +341,9 @@ async function boot() {
   }
 
   $('startBtn').addEventListener('click', start);
+  // iOS avisa el giro de pantalla antes de terminar de acomodar la página:
+  // se vuelve a calcular el tamaño un momento después.
+  window.addEventListener('orientationchange', () => setTimeout(() => { if (state.phase === 'running') mindar.resize(); }, 350));
   window.addEventListener('pagehide', stopEverything);
   // Si el navegador restaura la página desde su caché (botón "atrás"), la cámara ya no está: recargar.
   window.addEventListener('pageshow', (e) => { if (e.persisted) location.reload(); });
