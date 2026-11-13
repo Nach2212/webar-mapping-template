@@ -16,7 +16,8 @@ import { serve } from './lib/server.mjs';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const filter = process.argv[2] ?? '';
 const tmp = mkdtempSync(join(tmpdir(), 'webar-cam-'));
-const server = await serve(root);
+const generated = new Map(); // archivos de prueba creados al vuelo
+const server = await serve(root, 0, generated);
 const assert = (cond, msg) => { if (!cond) throw new Error(msg); };
 
 /** Crea un video .y4m de un cuadro con el marcador al centro: será "lo que ve la cámara". */
@@ -82,7 +83,54 @@ async function expectError(chrome, query, { start = false } = {}) {
   return chrome.evaluate(`document.getElementById('msg').textContent`);
 }
 
+/** Graba en Chrome un video corto magenta con un tono de 660 Hz (para probar type: 'video'). */
+async function makeTestVideo() {
+  const chrome = await launch({ args: ['--autoplay-policy=no-user-gesture-required'] });
+  try {
+    await chrome.goto(`${server.url}/tests/fixtures/blank.html`);
+    const b64 = await chrome.evaluate(`(async () => {
+      const c = document.createElement('canvas'); c.width = 320; c.height = 180;
+      const g = c.getContext('2d');
+      let n = 0;
+      const paint = () => { g.fillStyle = '#ff00ff'; g.fillRect(0, 0, 320, 180); g.fillStyle = '#fff'; g.fillRect((n++ * 4) % 320, 0, 6, 180); };
+      paint();
+      const timer = setInterval(paint, 33);
+      const ac = new AudioContext(); const osc = ac.createOscillator(); osc.frequency.value = 660;
+      const dest = ac.createMediaStreamDestination(); osc.connect(dest); osc.start();
+      const rec = new MediaRecorder(new MediaStream([...c.captureStream(30).getVideoTracks(), ...dest.stream.getAudioTracks()]), { mimeType: 'video/webm' });
+      const chunks = []; rec.ondataavailable = (e) => chunks.push(e.data);
+      rec.start(); await new Promise((r) => setTimeout(r, 2000));
+      await new Promise((r) => { rec.onstop = r; rec.stop(); }); clearInterval(timer);
+      const u8 = new Uint8Array(await new Blob(chunks).arrayBuffer());
+      let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
+      return btoa(s);
+    })()`);
+    return Buffer.from(b64, 'base64');
+  } finally { await chrome.close(); }
+}
+
+/** Graba unos segundos con el botón y devuelve datos del video, incluido el volumen (RMS) de su audio. */
+async function recordAndMeasure(chrome, ms = 3000) {
+  await chrome.click('#rec');
+  await chrome.waitFor(`document.getElementById('rec').classList.contains('on')`, 'que empiece a grabar');
+  await sleep(ms);
+  await chrome.click('#rec');
+  await chrome.waitFor(`window.__webar.lastCapture && window.__webar.lastCapture.kind === 'video' && document.querySelector('#previewMedia video')`, 'la vista previa del video');
+  return chrome.evaluate(`(async () => {
+    const buf = await (await fetch(document.querySelector('#previewMedia video').src)).arrayBuffer();
+    let rms = 0, seconds = 0;
+    try {
+      const audio = await new AudioContext().decodeAudioData(buf);
+      const d = audio.getChannelData(0); let sum = 0;
+      for (let i = 0; i < d.length; i++) sum += d[i] * d[i];
+      rms = Math.sqrt(sum / d.length); seconds = audio.duration;
+    } catch (_) { /* el archivo no trae audio */ }
+    return { ...window.__webar.lastCapture, rms, audioSeconds: seconds };
+  })()`);
+}
+
 const demoCam = await makeFakeCamera('targets/marker-demo.png', 'demo');
+generated.set('/tests/tmp/video.webm', await makeTestVideo());
 
 const tests = [
   ['unitarias + carga en el navegador (tests/index.html)', async () => {
@@ -131,6 +179,7 @@ const tests = [
         return { w: v.videoWidth, h: v.videoHeight, ...window.__webar.lastCapture, recOn: document.getElementById('rec').classList.contains('on') };
       })()`);
       assert(video.size > 10000 && video.w >= 300 && !video.recOn, 'Video inválido: ' + JSON.stringify(video));
+      assert(video.hasAudio === false, 'Sin contenido con sonido, el video no debería llevar pista de audio');
       console.log(`      foto ${photo.w}×${photo.h} · video ${video.w}×${video.h} ${video.type} ${Math.round(video.size / 1024)} KB`);
       const errors = chrome.logs.filter((l) => l.startsWith('[exception]') || l.startsWith('[error]'));
       assert(errors.length === 0, 'Errores en la consola:\n' + errors.join('\n'));
@@ -143,6 +192,42 @@ const tests = [
       await openAndTrack(chrome, '&config=tests/fixtures/config-short-video.js');
       await chrome.click('#rec');
       await chrome.waitFor(`window.__webar.lastCapture && window.__webar.lastCapture.kind === 'video'`, 'que el video se cierre solo', 15000);
+    } finally { await chrome.close(); }
+  }],
+
+  ['audio: el sonido del marcador queda dentro del video grabado', async () => {
+    const chrome = await launch({ args: withCamera(demoCam) });
+    try {
+      await openAndTrack(chrome, '&config=tests/fixtures/config-audio.js');
+      const v = await recordAndMeasure(chrome);
+      console.log(`      ${v.type} ${Math.round(v.size / 1024)} KB · audio ${v.audioSeconds.toFixed(1)} s · RMS ${v.rms.toFixed(3)}`);
+      assert(v.hasAudio, 'La grabación no incluyó pista de audio');
+      assert(v.rms > 0.02, 'El audio grabado está en silencio (RMS ' + v.rms + ')');
+      const errors = chrome.logs.filter((l) => l.startsWith('[exception]') || l.startsWith('[error]'));
+      assert(errors.length === 0, 'Errores en la consola:\n' + errors.join('\n'));
+    } finally { await chrome.close(); }
+  }],
+
+  ['video: se ve sobre el marcador y su sonido queda grabado', async () => {
+    const chrome = await launch({ args: withCamera(demoCam) });
+    try {
+      await openAndTrack(chrome, '&config=tests/fixtures/config-video.js');
+      await sleep(1500);
+      await chrome.click('#photo');
+      await chrome.waitFor(`document.querySelector('#previewMedia img') && document.querySelector('#previewMedia img').naturalWidth > 0`, 'la foto');
+      const magenta = await chrome.evaluate(`(() => {
+        const img = document.querySelector('#previewMedia img');
+        const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight;
+        const g = c.getContext('2d'); g.drawImage(img, 0, 0);
+        const d = g.getImageData(0, 0, c.width, c.height).data; let n = 0;
+        for (let i = 0; i < d.length; i += 4) if (d[i] > 180 && d[i + 1] < 90 && d[i + 2] > 180) n++;
+        return n / (d.length / 4);
+      })()`);
+      assert(magenta > 0.05, 'El video no aparece en la foto (magenta: ' + (magenta * 100).toFixed(1) + '%)');
+      await chrome.click('#closeBtn');
+      const v = await recordAndMeasure(chrome);
+      console.log(`      video visible en ${(magenta * 100).toFixed(0)}% de la foto · audio RMS ${v.rms.toFixed(3)}`);
+      assert(v.hasAudio && v.rms > 0.02, 'El sonido del video no quedó en la grabación: ' + JSON.stringify(v));
     } finally { await chrome.close(); }
   }],
 

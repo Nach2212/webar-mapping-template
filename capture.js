@@ -1,8 +1,8 @@
-import { captureSize, fileExt, pickMime } from './utils.js';
+import { captureSize, fileExt, isSameOrigin, pickMime } from './utils.js';
 
 /**
  * Foto y video con el AR incluido: compone cámara + escena 3D + marca de agua
- * en un <canvas> y lo graba con MediaRecorder.
+ * en un <canvas> y lo graba con MediaRecorder, sumando el sonido del contenido.
  *
  * opts = {
  *   container:  el <div> que contiene el <video> de la cámara y el canvas WebGL
@@ -10,18 +10,57 @@ import { captureSize, fileExt, pickMime } from './utils.js';
  *   watermark:  texto ('' = sin marca)
  *   quality:    perfil de utils.js (captureMax, fps, videoBits)
  *   maxSeconds: duración máxima del video
+ *   sounds:     elementos <audio>/<video> cuyo sonido debe quedar en el video grabado
  *   onState:    ({ recording, seconds }) => void
  *   onResult:   ({ kind: 'photo' | 'video', blob, name }) => void
  *   onError:    (claveDeMensaje, error?) => void
  * }
  */
 export function createCapture(opts) {
-  const { container, glCanvas, watermark, quality, maxSeconds, onState, onResult, onError } = opts;
+  const { container, glCanvas, watermark, quality, maxSeconds, sounds = [], onState, onResult, onError } = opts;
   const out = document.createElement('canvas');
   const ctx = out.getContext('2d', { alpha: false });
   let photoPending = false;
-  let rec = null; // { recorder, stream, chunks, t0, mime, failed }
+  let rec = null; // { recorder, canvasStream, chunks, t0, mime, failed }
   let lastCompose = 0;
+  let mix = null; // { ctx, dest } · false si el navegador no pudo crear la mezcla
+
+  /**
+   * Sonido para la grabación: cada <audio>/<video> se conecta a un AudioContext
+   * que lo manda a los parlantes (como antes) y además a un MediaStreamDestination,
+   * cuya pista se suma al video. Se crea recién al grabar por primera vez (dentro
+   * del toque en el botón), así quien no graba sigue con la reproducción normal.
+   */
+  function audioTrack() {
+    if (mix === false) return null;
+    // El audio de otro dominio sin CORS saldría en silencio al pasar por Web Audio: se deja fuera.
+    const usable = sounds.filter((el) => el.crossOrigin !== null || isSameOrigin(el.currentSrc || el.src, location.href));
+    if (!usable.length) return null;
+    try {
+      if (!mix) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        const ctx = new AC();
+        const dest = ctx.createMediaStreamDestination();
+        usable.forEach((el) => {
+          const src = ctx.createMediaElementSource(el);
+          src.connect(ctx.destination);
+          src.connect(dest);
+        });
+        mix = { ctx, dest };
+      }
+      resumeAudio();
+      return mix.dest.stream.getAudioTracks()[0] ?? null;
+    } catch (e) {
+      console.warn('[webar] no pude preparar el audio de la grabación', e);
+      mix = false;
+      return null;
+    }
+  }
+
+  /** El sistema puede suspender el AudioContext (llamada, cambio de app): hay que reanudarlo. */
+  function resumeAudio() {
+    if (mix && mix.ctx.state !== 'running' && mix.ctx.state !== 'closed') mix.ctx.resume().catch(() => {});
+  }
 
   const supported = (m) => typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(m);
   const canRecord = () => typeof out.captureStream === 'function' && !!pickMime(supported, false);
@@ -70,33 +109,37 @@ export function createCapture(opts) {
     if (!canRecord()) return onError('errNoRecorder');
     if (!compose()) return; // fija el tamaño del canvas antes de capturar
 
-    const mime = pickMime(supported, false);
-    let stream = null;
+    let sound = audioTrack();
+    let mime = sound ? pickMime(supported, true) : null;
+    if (!mime) { sound = null; mime = pickMime(supported, false); } // sin formato con audio: se graba sin sonido
+
+    let canvasStream = null;
     let recorder;
     try {
-      stream = out.captureStream(quality.fps);
+      canvasStream = out.captureStream(quality.fps);
+      const stream = new MediaStream([...canvasStream.getVideoTracks(), ...(sound ? [sound] : [])]);
       recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: quality.videoBits });
     } catch (e) {
-      if (stream) stream.getTracks().forEach((t) => t.stop());
+      if (canvasStream) canvasStream.getTracks().forEach((t) => t.stop());
       return onError('errRecFailed', e);
     }
 
-    const session = { recorder, stream, chunks: [], t0: performance.now(), mime, failed: false };
+    const session = { recorder, canvasStream, chunks: [], t0: performance.now(), mime, failed: false };
     recorder.ondataavailable = (e) => { if (e.data && e.data.size) session.chunks.push(e.data); };
     recorder.onerror = (e) => { session.failed = true; console.error('[webar] MediaRecorder', e.error ?? e); stopRecording(); };
     recorder.onstop = () => {
-      stream.getTracks().forEach((t) => t.stop()); // libera el stream del canvas
+      canvasStream.getTracks().forEach((t) => t.stop()); // libera el stream del canvas (la pista de audio se reutiliza)
       if (rec === session) rec = null;
       onState({ recording: false, seconds: 0 });
       const blob = new Blob(session.chunks, { type: mime.split(';')[0] });
       if (session.failed || !blob.size) return onError('errRecFailed');
-      onResult({ kind: 'video', blob, name: `webar-${Date.now()}.${fileExt(mime)}`, mime });
+      onResult({ kind: 'video', blob, name: `webar-${Date.now()}.${fileExt(mime)}`, mime, hasAudio: !!sound });
     };
 
     try {
       recorder.start();
     } catch (e) {
-      stream.getTracks().forEach((t) => t.stop());
+      canvasStream.getTracks().forEach((t) => t.stop());
       return onError('errRecFailed', e);
     }
     rec = session;
@@ -137,8 +180,12 @@ export function createCapture(opts) {
     stopRecording,
     frame,
     canRecord,
+    resumeAudio,
     get recording() { return !!rec; },
     get busy() { return photoPending || !!rec; },
-    dispose: stopRecording
+    dispose() {
+      stopRecording();
+      if (mix && mix.ctx.state !== 'closed') mix.ctx.close().catch(() => {});
+    }
   };
 }

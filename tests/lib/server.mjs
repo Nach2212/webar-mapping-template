@@ -10,11 +10,18 @@ const TYPES = {
   '.mp4': 'video/mp4', '.webm': 'video/webm', '.md': 'text/markdown; charset=utf-8', '.css': 'text/css'
 };
 
-export function serve(root, port = 0) {
+/** extra: Map de ruta → Buffer para servir archivos generados en memoria. */
+export function serve(root, port = 0, extra = new Map()) {
   const base = resolve(root);
   const server = createServer((req, res) => {
     let path = decodeURIComponent(new URL(req.url, 'http://x').pathname);
     if (path.endsWith('/')) path += 'index.html';
+    if (extra.has(path)) {
+      const body = extra.get(path);
+      res.writeHead(200, { 'Content-Type': TYPES[extname(path).toLowerCase()] ?? 'application/octet-stream', 'Content-Length': body.length, 'Accept-Ranges': 'none' });
+      res.end(body);
+      return;
+    }
     const file = normalize(join(base, path));
     if (file !== base && !file.startsWith(base + sep)) { res.writeHead(403).end(); return; }
     try {

@@ -6,7 +6,8 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
  *
  * ctx = {
  *   loader:  THREE.TextureLoader compartido
- *   media:   { videos, audios, spinners, mixers, needsLight } — lo que el loop necesita
+ *   media:   { videos, audios, sounds, spinners, mixers, needsLight } — lo que el loop necesita
+ *            (sounds = elementos con sonido: audios y videos con `sound: true`)
  *   onError: (item, error) => void — se llama si el archivo no carga
  * }
  */
@@ -20,17 +21,18 @@ export function buildContent(item, ctx) {
     const v = document.createElement('video');
     v.crossOrigin = 'anonymous'; // antes de src: sin esto WebGL no puede usar videos de otro dominio
     v.loop = item.loop ?? true;
-    v.muted = true;              // necesario para autoplay en móviles
+    v.muted = !item.sound;       // sin sonido por defecto: así puede empezar solo en móviles
     v.playsInline = true;
     // iOS mira los ATRIBUTOS (no solo las propiedades) para decidir si deja
     // reproducir sin pantalla completa y sin gesto del usuario.
-    v.setAttribute('muted', '');
+    if (!item.sound) v.setAttribute('muted', '');
     v.setAttribute('playsinline', '');
     v.setAttribute('webkit-playsinline', '');
     v.preload = 'auto';
     v.addEventListener('error', () => fail(v.error));
     v.src = item.src;
     media.videos.push(v);
+    if (item.sound) media.sounds.push(v);
 
     const tex = new THREE.VideoTexture(v);
     tex.colorSpace = THREE.SRGBColorSpace;
@@ -72,6 +74,7 @@ export function buildContent(item, ctx) {
     au.addEventListener('error', () => fail(au.error));
     au.src = item.src;
     media.audios.push(au);
+    media.sounds.push(au);
   } else {
     // 'image' (también es el valor por defecto si no se indica type)
     const mesh = new THREE.Mesh(

@@ -18,6 +18,10 @@ export const CONFIG = {
   // Duración máxima del video en segundos
   maxVideoSeconds: 30,
 
+  // ¿Incluir el sonido del contenido (audios y videos con sound: true) en los
+  // videos grabados? Ponlo en false si notas problemas de sonido al grabar.
+  recordAudio: true,
+
   // Calidad: 'auto' (recomendado: se adapta al celular), 'high' o 'low'
   // (low = menos resolución, pensado para celulares de gama baja)
   quality: 'auto',
@@ -52,7 +56,8 @@ export const CONFIG = {
         //   src: 'assets/mi-video.mp4',
         //   width: 1,
         //   position: [0, 0, 0.01],
-        //   loop: true
+        //   loop: true,
+        //   sound: false             // true = el video suena (por defecto va sin sonido)
         // }
       ]
     }

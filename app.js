@@ -19,7 +19,7 @@ window.__webar = state;
 let t = makeT('es');
 let mindar = null;
 let capture = null;
-let media = { videos: [], audios: [], spinners: [], mixers: [], needsLight: false };
+let media = { videos: [], audios: [], sounds: [], spinners: [], mixers: [], needsLight: false };
 let anchors = [];
 let toastTimer = 0;
 
@@ -152,7 +152,7 @@ async function boot() {
 
   anchors = CONFIG.targets.map((target, i) => {
     const anchor = mindar.addAnchor(i);
-    const mine = { videos: [], audios: [], spinners: media.spinners, mixers: media.mixers, needsLight: false };
+    const mine = { videos: [], audios: [], sounds: media.sounds, spinners: media.spinners, mixers: media.mixers, needsLight: false };
     target.content.forEach((item) => anchor.group.add(buildContent(item, { loader, media: mine, onError })));
     media.videos.push(...mine.videos);
     media.audios.push(...mine.audios);
@@ -190,7 +190,7 @@ async function boot() {
     if (previewUrl) URL.revokeObjectURL(previewUrl);
     previewUrl = null;
   }
-  function showPreview({ kind, blob, name }) {
+  function showPreview({ kind, blob, name, hasAudio }) {
     if (state.phase !== 'running') return;
     closePreview();
     previewUrl = URL.createObjectURL(blob);
@@ -221,7 +221,7 @@ async function boot() {
     $('downloadBtn').href = previewUrl;
     $('downloadBtn').download = name;
     $('preview').classList.remove('hidden');
-    state.lastCapture = { kind, name, type: blob.type, size: blob.size };
+    state.lastCapture = { kind, name, type: blob.type, size: blob.size, hasAudio: !!hasAudio };
   }
   $('closeBtn').addEventListener('click', closePreview);
 
@@ -323,6 +323,7 @@ async function boot() {
       watermark,
       quality,
       maxSeconds: CONFIG.maxVideoSeconds ?? 30,
+      sounds: CONFIG.recordAudio === false ? [] : media.sounds,
       onState: ({ recording, seconds }) => {
         $('rec').classList.toggle('on', recording);
         $('rec').textContent = recording ? '⏹' : '⏺';
@@ -335,6 +336,7 @@ async function boot() {
     state.recorder = capture.canRecord() ? 'ok' : 'no soportado';
 
     $('photo').addEventListener('click', () => capture.takePhoto());
+    document.addEventListener('pointerdown', () => capture.resumeAudio()); // por si el sistema suspendió el audio
     $('rec').addEventListener('click', () => (capture.recording ? capture.stopRecording() : capture.startRecording()));
 
     state.phase = 'running';
@@ -354,6 +356,7 @@ async function boot() {
       } else {
         if (track.readyState === 'ended') return fatal(t('errCameraLost'));
         mindar.video.play().catch(() => {});
+        capture.resumeAudio();
         anchors.filter((a) => a.visible).forEach((a) => a.els.forEach(play));
       }
     });
