@@ -103,10 +103,11 @@ Necesita un navegador con *import maps*: **Chrome 89+**, **Safari / iOS 16.4+** 
 |---|---|---|---|
 | Abrir cámara y seguir el marcador | ✅ | ❓ | 🧪 |
 | Contenido `image` | ✅ | ❓ | 🧪 |
-| Contenido `video`, `model`, `audio` | ❓ | ❓ | 🧪 |
-| Foto con AR | ❓ | ❓ | 🧪 |
-| Video con AR | ❓ | ❓ | 🧪 |
-| Sonido dentro del video grabado | ❓ | ❓ | 🧪 |
+| Contenido `model` y `audio` | ✅ | ❓ | 🧪 |
+| Contenido `video` | ❓ | ❓ | 🧪 |
+| Foto con AR | ✅ | ❓ | 🧪 |
+| Video con AR | ✅ | ❓ | 🧪 |
+| Sonido dentro del video grabado | ✅ | ❓ | 🧪 |
 | Botón Compartir | ❓ | ❓ | — (se usa Descargar) |
 
 - ✅ probado en un celular real · 🧪 probado solo con pruebas automáticas (Chrome de escritorio con cámara simulada) · ❓ aún sin probar en un dispositivo real.

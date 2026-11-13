@@ -103,10 +103,11 @@ It needs a browser with *import maps*: **Chrome 89+**, **Safari / iOS 16.4+** or
 |---|---|---|---|
 | Open camera and track the marker | ✅ | ❓ | 🧪 |
 | `image` content | ✅ | ❓ | 🧪 |
-| `video`, `model`, `audio` content | ❓ | ❓ | 🧪 |
-| Photo with AR | ❓ | ❓ | 🧪 |
-| Video with AR | ❓ | ❓ | 🧪 |
-| Sound inside the recorded video | ❓ | ❓ | 🧪 |
+| `model` and `audio` content | ✅ | ❓ | 🧪 |
+| `video` content | ❓ | ❓ | 🧪 |
+| Photo with AR | ✅ | ❓ | 🧪 |
+| Video with AR | ✅ | ❓ | 🧪 |
+| Sound inside the recorded video | ✅ | ❓ | 🧪 |
 | Share button | ❓ | ❓ | — (Download is used) |
 
 - ✅ tested on a real phone · 🧪 tested only by automated tests (desktop Chrome with a simulated camera) · ❓ not yet tested on a real device.

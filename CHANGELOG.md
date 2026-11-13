@@ -9,8 +9,8 @@ Los cambios importantes de cada versión. Formato basado en [Keep a Changelog](h
 Versión centrada en confiabilidad: que la plantilla avise cuando algo falla, rinda mejor y se pueda probar sin celular.
 *Reliability release: clear failures, better performance, and tests that run without a phone.*
 
-> **Estado de las pruebas / Test status:** todo lo de esta versión se verificó en Chrome de escritorio con una cámara simulada. En un celular real solo está confirmado (Android/Chrome, versión 0.1.0) abrir la cámara y seguir el marcador. Foto, video, sonido, modelos e iPhone siguen pendientes de confirmación en dispositivos reales.
-> *Everything here was verified in desktop Chrome with a simulated camera. On a real phone only camera + tracking is confirmed (Android/Chrome, on 0.1.0).*
+> **Estado de las pruebas / Test status:** todo lo de esta versión se verificó en Chrome de escritorio con una cámara simulada. En un celular real (Android/Chrome, 2026-11-13) se confirmó: cámara y seguimiento, contenido de imagen, modelo 3D y audio, foto, video grabado y sonido dentro del video, con el marcador demo y un marcador de ejemplo en pantalla. Siguen pendientes: iPhone/Safari, contenido de video, botón Compartir, gama baja y marcadores proyectados.
+> *Everything here was verified in desktop Chrome with a simulated camera. On a real phone (Android/Chrome) camera, tracking, image/model/audio content, photo, recorded video and recorded sound are confirmed. Still pending: iPhone/Safari, video content, Share button, low-end devices and projected markers.*
 
 ### Corregido · Fixed
 - `compile.html` no compilaba: cargaba el compilador de MindAR (un módulo ES) como script clásico. *The marker compiler page was broken (ES module loaded as a classic script).*
@@ -19,6 +19,7 @@ Versión centrada en confiabilidad: que la plantilla avise cuando algo falla, ri
 - `targets/marker-demo.png` traía un dato EXIF que lo mostraba girado 90° en navegadores. *Demo marker displayed rotated in browsers due to EXIF.*
 - Las imágenes de contenido se descargaban dos veces. *Content images were fetched twice.*
 - El stream del canvas no se liberaba después de cada grabación. *Canvas capture stream leaked after each recording.*
+- Fotos y videos salían en baja resolución en celulares (se medían en píxeles CSS); ahora usan los píxeles reales de la pantalla hasta 1280 px. *Captures were low resolution on phones; they now use device pixels up to 1280 px.*
 
 ### Agregado · Added
 - **Sonido dentro de los videos grabados** (items `audio` y videos con `sound: true`), opción `recordAudio`. *Content audio is recorded into captured videos.*
