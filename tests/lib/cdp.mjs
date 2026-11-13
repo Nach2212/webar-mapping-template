@@ -75,10 +75,16 @@ export async function launch({ args = [], width = 412, height = 820 } = {}) {
     }
   };
 
-  const send = (method, params = {}) => new Promise((resolve, reject) => {
+  // Cada orden tiene un límite de tiempo: si Chrome deja de responder, la prueba
+  // falla con un mensaje en vez de quedarse esperando para siempre.
+  const send = (method, params = {}, timeout = 60000) => new Promise((resolve, reject) => {
     const id = ++seq;
-    pending.set(id, { resolve, reject });
-    ws.send(JSON.stringify({ id, method, params }));
+    const timer = setTimeout(() => { pending.delete(id); reject(new Error(`Chrome no respondió a ${method}`)); }, timeout);
+    pending.set(id, {
+      resolve: (v) => { clearTimeout(timer); resolve(v); },
+      reject: (e) => { clearTimeout(timer); reject(e); }
+    });
+    try { ws.send(JSON.stringify({ id, method, params })); } catch (e) { clearTimeout(timer); pending.delete(id); reject(e); }
   });
 
   await send('Runtime.enable');
@@ -122,7 +128,7 @@ export async function launch({ args = [], width = 412, height = 820 } = {}) {
   };
 
   const close = async () => {
-    try { await send('Browser.close'); } catch (_) { /* ya cerrado */ }
+    try { await send('Browser.close', {}, 3000); } catch (_) { /* ya cerrado o sin respuesta */ }
     await sleep(300);
     try { proc.kill(); } catch (_) { /* nada */ }
     try { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); } catch (_) { /* nada */ }

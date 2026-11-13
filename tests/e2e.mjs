@@ -365,7 +365,8 @@ for (const [name, fn] of tests) {
   ran++;
   const t0 = Date.now();
   try {
-    await fn();
+    // Límite por prueba: en CI (WebGL por software) todo es más lento, pero nada debería colgarse.
+    await Promise.race([fn(), new Promise((_, no) => setTimeout(() => no(new Error('La prueba superó los 5 minutos')), 300000).unref())]);
     console.log(`✓ ${name} (${((Date.now() - t0) / 1000).toFixed(1)} s)`);
   } catch (e) {
     failed++;
