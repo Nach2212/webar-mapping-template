@@ -2,39 +2,58 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <title>WebAR Mapping Template</title>
   <style>
     html, body { margin: 0; height: 100%; overflow: hidden; background: #000; font-family: system-ui, sans-serif; }
-    #ar { position: fixed; inset: 0; }
-    #start, #msg {
+    #ar { position: fixed; inset: 0; overflow: hidden; }
+    #start, #msg, #preview {
       position: fixed; inset: 0; z-index: 20; display: flex; flex-direction: column;
       align-items: center; justify-content: center; gap: 16px; color: #fff;
-      background: #0b1020; text-align: center; padding: 24px;
+      background: #0b1020; text-align: center; padding: 24px; box-sizing: border-box;
     }
-    #start button, .btn {
+    #msg { z-index: 40; overflow-y: auto; }
+    #msg p, #msg ul { max-width: 420px; margin: 0; line-height: 1.45; }
+    #msg ul { text-align: left; font-size: 14px; padding-left: 20px; }
+    #preview { z-index: 30; background: rgba(5, 8, 16, .96); }
+    #previewMedia { flex: 1 1 auto; min-height: 0; display: flex; align-items: center; justify-content: center; width: 100%; }
+    #previewMedia img, #previewMedia video { max-width: 100%; max-height: 100%; border-radius: 12px; }
+    .row { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; padding-bottom: env(safe-area-inset-bottom); }
+    .btn {
       border: 0; border-radius: 999px; padding: 14px 28px; font-size: 18px; font-weight: 600;
-      background: #00c8ff; color: #04121c;
+      background: #00c8ff; color: #04121c; text-decoration: none; font-family: inherit; cursor: pointer;
     }
-    #hint {
-      position: fixed; top: 16px; left: 50%; transform: translateX(-50%); z-index: 10;
+    .btn:disabled { opacity: .6; }
+    .btn.ghost { background: rgba(255,255,255,.14); color: #fff; }
+    #bootNote { max-width: 340px; font-size: 14px; color: #ffd48a; margin: 0; }
+    #hint, #toast {
+      position: fixed; left: 50%; transform: translateX(-50%); z-index: 10; max-width: 86vw;
       background: rgba(0,0,0,.55); color: #fff; padding: 8px 16px; border-radius: 999px;
-      font-size: 14px; transition: opacity .3s; pointer-events: none;
+      font-size: 14px; pointer-events: none; text-align: center;
     }
+    #hint { top: calc(16px + env(safe-area-inset-top)); }
+    #toast { z-index: 35; bottom: calc(112px + env(safe-area-inset-bottom)); background: rgba(120, 60, 0, .9); border-radius: 12px; }
     #controls {
-      position: fixed; bottom: 24px; left: 0; right: 0; z-index: 10;
+      position: fixed; bottom: calc(24px + env(safe-area-inset-bottom)); left: 0; right: 0; z-index: 10;
       display: flex; justify-content: center; gap: 24px; align-items: center;
     }
     .round {
       width: 64px; height: 64px; border-radius: 50%; border: 4px solid #fff;
-      background: rgba(255,255,255,.2); color: #fff; font-size: 24px;
+      background: rgba(255,255,255,.2); color: #fff; font-size: 24px; cursor: pointer;
     }
     #rec.on { background: #ff3b3b; }
-    #timer { color: #fff; font-size: 14px; min-width: 40px; text-align: center; }
+    #timer { color: #fff; font-size: 14px; min-width: 40px; text-align: center; text-shadow: 0 1px 3px #000; }
+    #debug {
+      position: fixed; top: calc(56px + env(safe-area-inset-top)); left: 8px; z-index: 15; margin: 0; padding: 6px 8px;
+      background: rgba(0,0,0,.6); color: #9effa0; font: 11px/1.35 ui-monospace, monospace; border-radius: 6px;
+      pointer-events: none; white-space: pre-wrap; max-width: 80vw;
+    }
     .hidden { display: none !important; }
   </style>
 
-  <!-- three + MindAR. three/addons es obligatorio: MindAR importa CSS3DRenderer de ahí -->
+  <!-- three + MindAR desde CDN, con versión fija.
+       · three/addons es obligatorio: MindAR importa CSS3DRenderer de ahí.
+       · No subas three más allá de 0.161: MindAR 1.2.5 importa `sRGBEncoding`, que three eliminó en 0.162. -->
   <script type="importmap">
   {
     "imports": {
@@ -48,21 +67,53 @@
 <body>
   <div id="ar"></div>
 
+  <!-- Los textos se cambian en config.js (title, intro) o en i18n.js (todo lo demás). -->
   <div id="start">
-    <h1 style="margin:0">WebAR Mapping</h1>
-    <p style="max-width:320px;opacity:.8">Apunta la cámara al marcador para ver la magia ✨</p>
-    <button id="startBtn">Activar cámara</button>
+    <h1 id="title" style="margin:0" data-i18n="title">WebAR Mapping</h1>
+    <p id="intro" style="max-width:320px;opacity:.8;margin:0" data-i18n="intro">Apunta la cámara al marcador para ver la magia ✨</p>
+    <button id="startBtn" class="btn" disabled data-i18n="loading">Cargando…</button>
+    <p id="bootNote" class="hidden" role="alert"></p>
   </div>
 
-  <div id="msg" class="hidden"></div>
-  <div id="hint" class="hidden">Busca el marcador…</div>
+  <div id="msg" class="hidden" role="alert"></div>
+  <div id="hint" class="hidden" role="status" aria-live="polite" data-i18n="hint">Busca el marcador…</div>
+  <div id="toast" class="hidden" role="status" aria-live="polite"></div>
+  <pre id="debug" class="hidden"></pre>
 
   <div id="controls" class="hidden">
-    <button id="photo" class="round" aria-label="Foto">📷</button>
-    <span id="timer"></span>
-    <button id="rec" class="round" aria-label="Grabar video">⏺</button>
+    <button id="photo" class="round" aria-label="Sacar foto" data-i18n-label="photo">📷</button>
+    <span id="timer" aria-live="off"></span>
+    <button id="rec" class="round" aria-label="Grabar video" data-i18n-label="record">⏺</button>
   </div>
 
+  <div id="preview" class="hidden" role="dialog" aria-modal="true">
+    <div id="previewMedia"></div>
+    <div class="row">
+      <button id="shareBtn" class="btn" data-i18n="share">Compartir</button>
+      <a id="downloadBtn" class="btn ghost" data-i18n="download">Descargar</a>
+      <button id="closeBtn" class="btn ghost" data-i18n="close">Cerrar</button>
+    </div>
+  </div>
+
+  <script>
+    // Si app.js no logra cargar (sin internet, navegador antiguo sin "import maps"),
+    // avisa en vez de dejar el botón en "Cargando…" para siempre.
+    (function () {
+      var booted = false, failed = false;
+      function note(hard) {
+        if (booted || failed) return;
+        failed = hard;
+        var n = document.getElementById('bootNote');
+        n.textContent = hard
+          ? 'No se pudo cargar la app. Revisa tu conexión y que tu navegador esté actualizado (iPhone: iOS 16.4 o superior). · The app could not load. Check your connection and that your browser is up to date (iPhone: iOS 16.4+).'
+          : 'Está tardando más de lo normal… revisa tu conexión. · This is taking longer than usual… check your connection.';
+        n.classList.remove('hidden');
+      }
+      window.__webarBooted = function () { booted = true; document.getElementById('bootNote').classList.add('hidden'); };
+      window.addEventListener('error', function () { note(true); }, true);
+      setTimeout(function () { note(false); }, 15000);
+    })();
+  </script>
   <script type="module" src="app.js"></script>
 </body>
 </html>
