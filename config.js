@@ -18,6 +18,10 @@ export const CONFIG = {
   // Duración máxima del video en segundos
   maxVideoSeconds: 30,
 
+  // Calidad: 'auto' (recomendado: se adapta al celular), 'high' o 'low'
+  // (low = menos resolución, pensado para celulares de gama baja)
+  quality: 'auto',
+
   // Un item por marcador, EN EL MISMO ORDEN en que el compilador mostró las
   // imágenes. El primero es el índice 0, el segundo el 1, etc.
   targets: [

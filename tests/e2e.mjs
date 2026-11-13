@@ -146,6 +146,27 @@ const tests = [
     } finally { await chrome.close(); }
   }],
 
+  ['rendimiento: perfiles de calidad limitan pixel ratio, cámara y captura', async () => {
+    const measure = async (q) => {
+      const chrome = await launch({ args: [...withCamera(demoCam), '--force-device-scale-factor=3'] });
+      try {
+        await openAndTrack(chrome, '&q=' + q);
+        await chrome.click('#photo');
+        await chrome.waitFor(`document.querySelector('#previewMedia img') && document.querySelector('#previewMedia img').naturalWidth > 0`, 'la foto');
+        return await chrome.evaluate(`(() => { const c = document.querySelector('#ar canvas'); const i = document.querySelector('#previewMedia img');
+          return { quality: window.__webar.quality, ratio: c.width / c.clientWidth, photoLong: Math.max(i.naturalWidth, i.naturalHeight), dpr: devicePixelRatio }; })()`);
+      } finally { await chrome.close(); }
+    };
+    const high = await measure('high');
+    const low = await measure('low');
+    console.log(`      high ${JSON.stringify(high)}
+      low  ${JSON.stringify(low)}`);
+    assert(high.dpr === 3, 'La prueba necesita devicePixelRatio 3');
+    assert(high.quality === 'high' && Math.abs(high.ratio - 2) < 0.05, 'high debería limitar el pixel ratio a 2');
+    assert(low.quality === 'low' && Math.abs(low.ratio - 1) < 0.05, 'low debería usar pixel ratio 1');
+    assert(low.photoLong <= 854 && high.photoLong <= 1280, 'Tamaño de captura fuera del límite');
+  }],
+
   ['error: permiso de cámara denegado', async () => {
     const chrome = await launch({ args: ['--use-fake-device-for-media-stream', '--deny-permission-prompts'] });
     try {

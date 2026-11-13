@@ -3,7 +3,7 @@ import { MindARThree } from 'mindar-image-three';
 import { buildContent } from './content.js';
 import { createCapture } from './capture.js';
 import { makeT } from './i18n.js';
-import { QUALITY, VERSION, cameraErrorKey, inspectMind, numParam, pickLang, safeConfigPath, validateConfig } from './utils.js';
+import { QUALITY, VERSION, cameraErrorKey, inspectMind, numParam, pickLang, pickQuality, safeConfigPath, shouldDowngrade, validateConfig } from './utils.js';
 
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
@@ -116,7 +116,12 @@ async function boot() {
     return fatal(t('errMindFetch', { file }));
   }
 
-  const quality = QUALITY.high;
+  // Calidad: config.js (quality) o ?q=low / ?q=high. En 'auto' se parte según
+  // el equipo y, si los FPS caen, se baja sola mientras se usa (ver loop).
+  const qParam = params.get('q');
+  const qSetting = qParam === 'low' || qParam === 'high' ? qParam : CONFIG.quality ?? 'auto';
+  const quality = { ...pickQuality(qSetting, navigator) }; // copia: puede cambiar en 'auto'
+  const fpsSamples = [];
   state.quality = quality.name;
 
   mindar = new MindARThree({
@@ -130,6 +135,9 @@ async function boot() {
     filterBeta: numParam(params.get('beta'), 0.001, 0, 1000)
   });
   const { renderer, scene, camera } = mindar;
+  // MindAR usa el devicePixelRatio completo (3 en muchos celulares = 9 veces
+  // más píxeles que dibujar). Con 2 se ve igual de bien y rinde mucho más.
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, quality.pixelRatio));
   const loader = new THREE.TextureLoader();
   const onError = (item, e) => {
     console.warn('[webar] no pude cargar', item.src, e);
@@ -240,6 +248,17 @@ async function boot() {
       state.fps = Math.round((frames * 1000) / (now - fpsT0));
       frames = 0;
       fpsT0 = now;
+      // Calidad automática: tras 3 segundos seguidos bajo 20 FPS se pasa al perfil
+      // liviano (nunca a mitad de una grabación: cambiaría el tamaño del video).
+      if (qSetting === 'auto' && quality.name === 'high' && !document.hidden && !capture.recording) {
+        fpsSamples.push(state.fps);
+        if (shouldDowngrade(fpsSamples)) {
+          Object.assign(quality, QUALITY.low);
+          renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, quality.pixelRatio));
+          state.quality = 'low (auto)';
+          console.warn('[webar] FPS bajos: cambio a calidad liviana');
+        }
+      }
       if (debug) {
         $('debug').textContent = [
           `webar-mapping-template v${VERSION}`,
@@ -279,7 +298,7 @@ async function boot() {
     const env = { isSecureContext: window.isSecureContext, hasMediaDevices: !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia) };
     if (!env.isSecureContext || !env.hasMediaDevices) return fatal(t(cameraErrorKey(null, env)));
 
-    const probe = probeCamera();
+    const probe = probeCamera(quality.camera);
     try {
       await startTracking(mindar, probe);
     } catch (e) {
@@ -357,9 +376,10 @@ async function boot() {
 /**
  * MindAR pide la cámara por su cuenta y, si falla, rechaza sin decir por qué.
  * Envolvemos getUserMedia mientras arranca para conocer el error real
- * (permiso denegado, sin cámara, cámara ocupada…).
+ * (permiso denegado, sin cámara, cámara ocupada…). De paso permite pedir una
+ * resolución de cámara menor en el perfil de calidad liviano.
  */
-function probeCamera() {
+function probeCamera(size) {
   const md = navigator.mediaDevices;
   const original = md.getUserMedia;
   const probe = {
@@ -369,6 +389,10 @@ function probeCamera() {
   };
   try {
     md.getUserMedia = function (constraints) {
+      // Perfil liviano: se pide una cámara de baja resolución (menos píxeles que analizar).
+      if (size && constraints && constraints.video && typeof constraints.video === 'object') {
+        constraints = { ...constraints, video: { ...constraints.video, width: { ideal: size.width }, height: { ideal: size.height } } };
+      }
       return original.call(md, constraints).then(
         (stream) => { probe.granted = true; return stream; },
         (e) => { probe.error = e; throw e; }
