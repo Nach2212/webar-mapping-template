@@ -5,19 +5,32 @@ export const CONFIG = {
   // Archivo compilado con tus marcadores (ver compile.html)
   targetsFile: 'targets/targets.mind',
 
+  // Textos de la pantalla de inicio ('' = usa los textos por defecto)
+  title: '',
+  intro: '',
+
+  // Idioma de botones y mensajes: 'auto' (según el celular), 'es' o 'en'
+  lang: 'auto',
+
   // Marca de agua que sale en fotos y videos ('' para quitarla)
   watermark: 'webar-mapping-template',
 
   // Duración máxima del video en segundos
   maxVideoSeconds: 30,
 
-  // Un item por marcador, EN EL MISMO ORDEN en que subiste las imágenes
-  // al compilador. El primero es el índice 0, el segundo el 1, etc.
+  // ¿Incluir el sonido del contenido (audios y videos con sound: true) en los
+  // videos grabados? Ponlo en false si notas problemas de sonido al grabar.
+  recordAudio: true,
+
+  // Calidad: 'auto' (recomendado: se adapta al celular), 'high' o 'low'
+  // (low = menos resolución, pensado para celulares de gama baja)
+  quality: 'auto',
+
+  // Un item por marcador, EN EL MISMO ORDEN en que el compilador mostró las
+  // imágenes. El primero es el índice 0, el segundo el 1, etc.
   targets: [
     {
       name: 'demo',
-      // alto / ancho de la imagen del marcador (marker-demo.png = 372 / 674)
-      aspect: 372 / 674,
       content: [
         {
           type: 'image',            // 'image' | 'video' | 'model' | 'audio'
@@ -43,7 +56,8 @@ export const CONFIG = {
         //   src: 'assets/mi-video.mp4',
         //   width: 1,
         //   position: [0, 0, 0.01],
-        //   loop: true
+        //   loop: true,
+        //   sound: false             // true = el video suena (por defecto va sin sonido)
         // }
       ]
     }

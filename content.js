@@ -2,35 +2,49 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 /**
- * Crea el contenido de un item de config.js.
- * `media` acumula lo que el loop principal necesita: videos, audios, spinners, mixers.
+ * Crea el contenido de un item de config.js y devuelve un THREE.Group.
+ *
+ * ctx = {
+ *   loader:  THREE.TextureLoader compartido
+ *   media:   { videos, audios, sounds, spinners, mixers, needsLight } — lo que el loop necesita
+ *            (sounds = elementos con sonido: audios y videos con `sound: true`)
+ *   onError: (item, error) => void — se llama si el archivo no carga
+ * }
  */
-export function buildContent(item, loader, media) {
-  const videos = media.videos;
+export function buildContent(item, ctx) {
+  const { loader, media } = ctx;
+  const fail = (e) => ctx.onError && ctx.onError(item, e);
   const group = new THREE.Group();
   const w = item.width ?? 1;
 
   if (item.type === 'video') {
     const v = document.createElement('video');
-    v.src = item.src;
+    v.crossOrigin = 'anonymous'; // antes de src: sin esto WebGL no puede usar videos de otro dominio
     v.loop = item.loop ?? true;
-    v.muted = true;            // necesario para autoplay en móviles
+    v.muted = !item.sound;       // sin sonido por defecto: así puede empezar solo en móviles
     v.playsInline = true;
-    v.crossOrigin = 'anonymous';
+    // iOS mira los ATRIBUTOS (no solo las propiedades) para decidir si deja
+    // reproducir sin pantalla completa y sin gesto del usuario.
+    if (!item.sound) v.setAttribute('muted', '');
+    v.setAttribute('playsinline', '');
+    v.setAttribute('webkit-playsinline', '');
     v.preload = 'auto';
-    videos.push(v);
+    v.addEventListener('error', () => fail(v.error));
+    v.src = item.src;
+    media.videos.push(v);
+    if (item.sound) media.sounds.push(v);
+
     const tex = new THREE.VideoTexture(v);
     tex.colorSpace = THREE.SRGBColorSpace;
-    const vw = () => (v.videoHeight ? v.videoHeight / v.videoWidth : 9 / 16);
     const mesh = new THREE.Mesh(
       new THREE.PlaneGeometry(1, 1),
       new THREE.MeshBasicMaterial({ map: tex, transparent: true })
     );
-    v.addEventListener('loadedmetadata', () => mesh.scale.set(w, w * vw(), 1));
-    mesh.scale.set(w, w * vw(), 1);
+    const fit = () => mesh.scale.set(w, w * (v.videoWidth ? v.videoHeight / v.videoWidth : 9 / 16), 1);
+    v.addEventListener('loadedmetadata', fit);
+    fit();
     mesh.position.set(...(item.position ?? [0, 0, 0.01]));
     group.add(mesh);
-    group.userData.video = v;
   } else if (item.type === 'model') {
     // Modelo 3D .glb / .gltf (con sus animaciones, si las trae)
     new GLTFLoader().load(
@@ -40,9 +54,8 @@ export function buildContent(item, loader, media) {
         m.scale.setScalar(item.scale ?? 1);
         m.position.set(...(item.position ?? [0, 0, 0]));
         if (item.rotation) m.rotation.set(...item.rotation); // radianes
-        if (item.spin) m.userData.spin = true;
         group.add(m);
-        media.spinners.push(...(item.spin ? [m] : []));
+        if (item.spin) media.spinners.push(m);
         if (gltf.animations.length) {
           const mixer = new THREE.AnimationMixer(m);
           gltf.animations.forEach((clip) => mixer.clipAction(clip).play());
@@ -50,26 +63,39 @@ export function buildContent(item, loader, media) {
         }
       },
       undefined,
-      (e) => console.error('[webar] no pude cargar el modelo', item.src, e)
+      fail
     );
     media.needsLight = true;
   } else if (item.type === 'audio') {
-    const au = new Audio(item.src);
+    const au = new Audio();
     au.loop = item.loop ?? true;
-    au.volume = item.volume ?? 1;
+    au.volume = Math.min(1, Math.max(0, item.volume ?? 1));
     au.preload = 'auto';
+    au.addEventListener('error', () => fail(au.error));
+    au.src = item.src;
     media.audios.push(au);
+    media.sounds.push(au);
   } else {
-    const tex = loader.load(item.src);
-    tex.colorSpace = THREE.SRGBColorSpace;
-    const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true });
-    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mat);
-    const img = new Image();
-    img.onload = () => mesh.scale.set(w, w * (img.height / img.width), 1);
-    img.src = item.src;
-    mesh.scale.set(w, w, 1);
+    // 'image' (también es el valor por defecto si no se indica type)
+    const mesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(1, 1),
+      new THREE.MeshBasicMaterial({ transparent: true })
+    );
+    mesh.visible = false; // hasta que cargue: evita un cuadro blanco
+    loader.load(
+      item.src,
+      (tex) => {
+        tex.colorSpace = THREE.SRGBColorSpace;
+        mesh.material.map = tex;
+        mesh.material.needsUpdate = true;
+        mesh.scale.set(w, w * (tex.image.height / tex.image.width), 1);
+        mesh.visible = true;
+      },
+      undefined,
+      fail
+    );
     mesh.position.set(...(item.position ?? [0, 0, 0.01]));
-    if (item.spin) { mesh.userData.spin = true; media.spinners.push(mesh); }
+    if (item.spin) media.spinners.push(mesh);
     group.add(mesh);
   }
   return group;

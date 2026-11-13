@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Pruebas · webar-mapping-template</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 760px; margin: 24px auto; padding: 0 16px; line-height: 1.45; }
+    #summary { font-size: 20px; font-weight: 700; padding: 12px 16px; border-radius: 8px; background: #eee; }
+    #summary.pass { background: #d8f5dd; color: #0b5a1c; }
+    #summary.fail { background: #fde0dd; color: #8c1d18; }
+    li.fail { color: #b3261e; font-weight: 600; }
+    li pre { margin: 4px 0; white-space: pre-wrap; }
+    iframe { width: 300px; height: 420px; border: 1px solid #ccc; border-radius: 8px; }
+  </style>
+</head>
+<body>
+  <h1>Pruebas</h1>
+  <p>Abre esta página con un servidor estático (<code>python3 -m http.server</code> → <code>/tests/</code>). No necesita cámara.</p>
+  <div id="summary" data-status="running">Corriendo…</div>
+  <ol id="list"></ol>
+  <h2>Prueba de carga</h2>
+  <p>La app real se carga abajo: debe terminar con el botón «Activar cámara» habilitado (importa three.js y MindAR desde el CDN).</p>
+  <iframe id="app" title="app" src="about:blank"></iframe>
+
+  <script type="module">
+    import { runAll } from './unit.js';
+    const list = document.getElementById('list');
+    const summary = document.getElementById('summary');
+    const row = (name, err) => {
+      const li = document.createElement('li');
+      li.textContent = (err ? '✗ ' : '✓ ') + name;
+      if (err) { li.className = 'fail'; const pre = document.createElement('pre'); pre.textContent = err.message; li.appendChild(pre); }
+      list.appendChild(li);
+    };
+
+    const res = await runAll(row);
+
+    // Prueba de carga: index.html debe quedar listo (botón habilitado, sin mensaje de error).
+    const smoke = async () => {
+      const frame = document.getElementById('app');
+      frame.src = '../index.html';
+      const t0 = performance.now();
+      while (performance.now() - t0 < 40000) {
+        await new Promise((r) => setTimeout(r, 250));
+        const doc = frame.contentDocument;
+        const btn = doc && doc.getElementById('startBtn');
+        const msg = doc && doc.getElementById('msg');
+        if (msg && !msg.classList.contains('hidden')) throw new Error('La app mostró un error: ' + msg.textContent.trim());
+        if (btn && !btn.disabled) return;
+      }
+      throw new Error('El botón de inicio no se habilitó en 40 s');
+    };
+    let total = res.total + 1, failed = res.failed;
+    try { await smoke(); row('carga: index.html queda listo para iniciar', null); }
+    catch (e) { failed++; row('carga: index.html queda listo para iniciar', e); }
+
+    summary.textContent = failed ? `${failed} de ${total} pruebas fallaron` : `${total} pruebas OK`;
+    summary.className = failed ? 'fail' : 'pass';
+    summary.dataset.status = failed ? 'fail' : 'pass'; // lo lee tests/e2e.mjs
+  </script>
+</body>
+</html>
