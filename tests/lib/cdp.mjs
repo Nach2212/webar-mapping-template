@@ -47,10 +47,13 @@ export async function launch({ args = [], width = 412, height = 820 } = {}) {
 
   let target;
   for (let i = 0; i < 50 && !target; i++) {
-    const list = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
-    target = list.find((t) => t.type === 'page');
+    try {
+      const list = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
+      target = list.find((t) => t.type === 'page');
+    } catch (_) { /* Chrome aún no atiende el puerto: se reintenta */ }
     if (!target) await sleep(100);
   }
+  if (!target) { proc.kill(); throw new Error('Chrome no mostró ninguna página'); }
   const ws = new WebSocket(target.webSocketDebuggerUrl);
   await new Promise((res, rej) => { ws.onopen = res; ws.onerror = () => rej(new Error('No pude conectar con Chrome')); });
 
